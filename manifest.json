@@ -1,0 +1,29 @@
+{
+    "name": "LlegAPP · Tu bus en tiempo real",
+    "short_name": "LlegAPP",
+    "description": "Rastreo profesional de buses urbanos en tiempo real: mapa en vivo, planificador de viajes y alertas de llegada.",
+    "lang": "es",
+    "dir": "ltr",
+    "start_url": "/LLEGAPP3/pages/mapa.php",
+    "scope": "/LLEGAPP3/",
+    "display": "standalone",
+    "orientation": "portrait-primary",
+    "background_color": "#0d1411",
+    "theme_color": "#00b25a",
+    "icons": [
+        { "src": "/LLEGAPP3/assets/img/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+        { "src": "/LLEGAPP3/assets/img/icon-192.png", "sizes": "192x192", "type": "image/png" },
+        { "src": "/LLEGAPP3/assets/img/icon-512.png", "sizes": "512x512", "type": "image/png" }
+    ],
+    "shortcuts": [
+        {
+            "name": "Mapa en vivo",
+            "url": "/LLEGAPP3/pages/mapa.php",
+            "icons": [{ "src": "/LLEGAPP3/assets/img/favicon.svg", "sizes": "any" }]
+        },
+        {
+            "name": "Planificar viaje",
+            "url": "/LLEGAPP3/pages/planificador.php"
+        }
+    ]
+}

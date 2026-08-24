@@ -1,0 +1,11 @@
+# LlegAPP 3
+logs/
+*.log
+vendor/
+node_modules/
+.DS_Store
+Thumbs.db
+
+# Entornos locales
+.env
+config.local.php
