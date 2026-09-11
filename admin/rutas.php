@@ -312,13 +312,62 @@ require __DIR__ . '/_layout.php';
     </div>
 <?php endif; ?>
 
+<!-- Modal crear ruta -->
+<div class="modal-backdrop" id="modalCrearRuta" hidden onclick="if(event.target===this)cerrarModal(this.id)">
+    <div class="modal card">
+        <div class="flex-between" style="margin-bottom:12px">
+            <strong style="font-size:16px">➕ Crear nueva ruta</strong>
+            <button type="button" class="icon-btn" onclick="cerrarModal('modalCrearRuta')" aria-label="Cerrar" style="width:32px;height:32px">✕</button>
+        </div>
+        <form method="post" style="margin-top:14px">
+            <?= csrfField() ?>
+            <input type="hidden" name="accion" value="crear_ruta">
+            <div class="form-row">
+                <div class="field">
+                    <label class="label">Código *</label>
+                    <input class="input" name="route_id" required maxlength="10" placeholder="M606">
+                </div>
+                <div class="field">
+                    <label class="label">Color</label>
+                    <input type="color" class="input" name="color" value="#00b25a" style="height:42px;padding:4px">
+                </div>
+            </div>
+            <div class="field">
+                <label class="label">Nombre completo</label>
+                <input class="input" name="name" placeholder="Terminal ↔ Destino" required>
+            </div>
+            <div class="field">
+                <label class="label">Descripción</label>
+                <textarea class="textarea" name="description" placeholder="Zonas que cubre…"></textarea>
+            </div>
+            <div class="form-row">
+                <div class="field">
+                    <label class="label">Frecuencia (min)</label>
+                    <input type="number" class="input" name="frequency_min" value="10" min="2" max="60">
+                </div>
+                <div class="field">
+                    <label class="label">Horario</label>
+                    <div style="display:flex;gap:6px;align-items:center">
+                        <input type="time" class="input" name="first_departure" value="05:00">
+                        <input type="time" class="input" name="last_departure" value="22:30">
+                    </div>
+                </div>
+            </div>
+            <button type="submit" class="btn btn-primary btn-block">Crear ruta</button>
+        </form>
+    </div>
+</div>
+
 <style>
 .modal-backdrop { position: fixed; inset: 0; background: rgba(10,15,12,.55); backdrop-filter: blur(3px); z-index: 1200; display: grid; place-items: center; padding: 18px; }
+.modal-backdrop[hidden] { display: none !important; }
 .modal { width: min(520px, 100%); max-height: 88vh; overflow-y: auto; animation: slideUp .22s ease; }
 @media (max-width:900px){ #adminRutasGrid { grid-template-columns: 1fr !important; } }
 </style>
 <script>
-function mostrarModal(id){ document.getElementById(id).hidden = false; }
+function mostrarModal(id){ const el = document.getElementById(id); if (el) el.hidden = false; }
+function cerrarModal(id){ const el = document.getElementById(id); if (el) el.hidden = true; }
+document.addEventListener('keydown', e => { if (e.key === 'Escape') document.querySelectorAll('.modal-backdrop:not([hidden])').forEach(m => m.hidden = true); });
 </script>
 
 <?php require __DIR__ . '/_layout_end.php'; ?>

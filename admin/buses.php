@@ -145,9 +145,12 @@ require __DIR__ . '/_layout.php';
 </div>
 
 <!-- Modal crear bus -->
-<div class="modal-backdrop" id="modalCrearBus" hidden onclick="if(event.target===this)this.hidden=true">
+<div class="modal-backdrop" id="modalCrearBus" hidden onclick="if(event.target===this)cerrarModal(this.id)">
     <div class="modal card">
-        <strong style="font-size:16px">➕ Añadir bus a la flota</strong>
+        <div class="flex-between" style="margin-bottom:12px">
+            <strong style="font-size:16px">➕ Añadir bus a la flota</strong>
+            <button type="button" class="icon-btn" onclick="cerrarModal('modalCrearBus')" aria-label="Cerrar" style="width:32px;height:32px">✕</button>
+        </div>
         <form method="post" style="margin-top:14px">
             <?= csrfField() ?>
             <input type="hidden" name="accion" value="crear_bus">
@@ -180,10 +183,13 @@ require __DIR__ . '/_layout.php';
 
 <style>
 .modal-backdrop { position: fixed; inset: 0; background: rgba(10,15,12,.55); z-index: 1200; display: grid; place-items: center; padding: 18px; }
+.modal-backdrop[hidden] { display: none !important; }
 .modal { width: min(500px, 100%); animation: slideUp .22s ease; }
 </style>
 <script>
-function mostrarModal(id){ document.getElementById(id).hidden = false; }
+function mostrarModal(id){ const el = document.getElementById(id); if (el) el.hidden = false; }
+function cerrarModal(id){ const el = document.getElementById(id); if (el) el.hidden = true; }
+document.addEventListener('keydown', e => { if (e.key === 'Escape') document.querySelectorAll('.modal-backdrop:not([hidden])').forEach(m => m.hidden = true); });
 </script>
 
 <?php require __DIR__ . '/_layout_end.php'; ?>
