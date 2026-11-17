@@ -197,17 +197,23 @@ async function mostrarTarjetaBus(bus) {
         $('.map-canvas')?.appendChild(cont);
     }
 
+    const fuenteClase = bus.es_dato_real ? 'badge-success' : 'badge-danger';
+    const fuenteTexto = bus.es_dato_real ? '🟢 Dato en vivo' : '🔴 Dato simulado';
+
     cont.innerHTML = `
         <div class="flex-between" style="margin-bottom:8px">
             <span class="live-indicator"><span class="live-dot"></span> EN VIVO</span>
             <button class="icon-btn" id="cerrarBusCard" aria-label="Cerrar">✕</button>
         </div>
         <div class="flex-between">
-            <div>
+            <div style="display:flex;gap:12px;align-items:center">
                 <strong style="font-size:18px">${bus.code}</strong>
                 <span class="chip" style="--route-color:${bus.color};margin-left:8px">${bus.route_id}</span>
             </div>
             <button class="btn btn-secondary btn-sm" id="btnSeguir">${APP.busSeguido === bus.id ? 'Siguiendo ✓' : 'Seguir'}</button>
+        </div>
+        <div style="display:flex;gap:6px;align-items:center;margin:6px 0 4px">
+            <span class="badge ${fuenteClase}" style="font-size:11px">${fuenteTexto}</span>
         </div>
         <p style="font-size:13px;color:var(--text-muted);margin:4px 0 10px">${bus.route_name}</p>
         <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:13px">
@@ -218,6 +224,10 @@ async function mostrarTarjetaBus(bus) {
         </div>
         <div class="skeleton" style="height:7px;margin-top:12px;border-radius:99px">
             <div style="height:100%;width:${Math.round(bus.progress * 100)}%;background:${bus.color};border-radius:99px;transition:width 1s linear"></div>
+        </div>
+        <div style="margin-top:10px;display:flex;gap:6px">
+            <button type="button" class="btn btn-ghost btn-sm btnReportarBus" data-bus-id="${bus.id}" data-route-id="${bus.route_id}" title="Reportar problema con este bus">🚨 Reportar</button>
+            <button type="button" class="btn btn-ghost btn-sm btnViajeActivo" data-bus-id="${bus.id}" data-route-id="${bus.route_id}" title="Seguir este viaje">🧭 Viajar</button>
         </div>`;
 
     $('#cerrarBusCard').onclick = () => { cont.remove(); APP.busSeguido = null; };
@@ -225,6 +235,27 @@ async function mostrarTarjetaBus(bus) {
         APP.busSeguido = APP.busSeguido === bus.id ? null : bus.id;
         seleccionarBus(bus);
     };
+
+    cont.querySelector('.btnReportarBus')?.addEventListener('click', () => {
+        const tipo = prompt('¿Qué tipo de problema observas?\n1. bus_fantasma\n2. ruta_incorrecta\n3. tiempo_inaccurato\n4. bus_detenido\n5. otro\n\nEscribe el número o nombre:');
+        if (!tipo) return;
+        const tiposMap = { '1': 'bus_fantasma', '2': 'ruta_incorrecta', '3': 'tiempo_inaccurato', '4': 'bus_detenido', '5': 'otro' };
+        const tipoValido = tiposMap[tipo] || (['bus_fantasma','ruta_incorrecta','tiempo_inaccurato','bus_detenido','otro'].includes(tipo) ? tipo : 'otro');
+        const desc = prompt('Describe el problema (opcional):') || '';
+        reportarProblema(bus.id, bus.route_id, null, tipoValido, desc, bus.lat, bus.lng);
+    });
+
+    cont.querySelector('.btnViajeActivo')?.addEventListener('click', async () => {
+        const data = await api(`${APP.base}/api/viaje_activo.php`, {
+            method: 'POST',
+            body: JSON.stringify({ route_id: bus.route_id, bus_id: bus.id }),
+        });
+        if (data?.success) {
+            toast('Viaje iniciado', 'Te avisaremos al acercarte a tu parada destino.', 'success', 3000);
+        } else {
+            toast('Error', data?.message || 'No se pudo iniciar el viaje.', 'error');
+        }
+    });
 
     if (APP.busSeguido === bus.id) {
         APP.mapa.panTo([bus.lat, bus.lng], { animate: true, duration: .6 });
@@ -243,10 +274,24 @@ function iniciarPollingFlota(opts = {}) {
             const data = await api(url);
             if (data?.success) {
                 pintarBuses(data.data.buses, { centrarSeguido: false });
+                mostrarIndicadorFuenteDatos(data.data.buses);
                 onDatos?.(data.data);
+                // Mostrar indicador de fuente si hay contenedor
+                const cont = document.getElementById('indicadorFuente');
+                if (cont && data.data.buses.length > 0) {
+                    const esReal = data.data.buses.some(b => b.es_dato_real);
+                    cont.innerHTML = esReal
+                        ? '<span class="badge badge-success">🟢 Datos en vivo (fuente oficial)</span>'
+                        : '<span class="badge badge-danger">🔴 Datos simulados (demostración)</span>';
+                }
+            } else {
+                const cont = document.getElementById('indicadorFuente');
+                if (cont) cont.innerHTML = '<span class="badge badge-danger">⚠️ Servicio no disponible</span>';
             }
         } catch (err) {
             console.warn('[flota] sin conexión con el servidor', err);
+            const cont = document.getElementById('indicadorFuente');
+            if (cont) cont.innerHTML = '<span class="badge badge-danger">⚠️ Sin conexión al servidor</span>';
         }
     }
 
@@ -314,6 +359,58 @@ async function alternarFavorito(tipo, clave, boton = null) {
     );
 }
 
+/* ============================ Usuario en el mapa ========================== */
+let marcadorUsuario = null;
+let precisionUsuario = null;
+
+function marcarUsuarioEnMapa(lat, lng, precision = null) {
+    if (!APP.mapa || !window.L) return;
+    if (marcadorUsuario) APP.mapa.removeLayer(marcadorUsuario);
+    if (precisionUsuario) APP.mapa.removeLayer(precisionUsuario);
+
+    const color = '#0ea5e9';
+    marcadorUsuario = L.circleMarker([lat, lng], {
+        radius: 9, color, fillColor: '#fff', fillOpacity: 0.9, weight: 3
+    }).bindTooltip('Estás aquí').openTooltip().addTo(APP.mapa);
+
+    if (precision) {
+        precisionUsuario = L.circle([lat, lng], {
+            radius: precision, color, fillColor: color, fillOpacity: 0.15, weight: 1, dashArray: '6 9'
+        }).addTo(APP.mapa);
+    }
+
+    APP.mapa.flyTo([lat, lng], 15, { animate: true, duration: 1 });
+}
+
+/* ============================ Reportar problema =========================== */
+async function reportarProblema(busId = null, routeId = null, stopId = null, tipo = 'otro', descripcion = '', lat = null, lng = null) {
+    const data = await api(`${APP.base}/api/reporte_problema.php`, {
+        method: 'POST',
+        body: JSON.stringify({ bus_id: busId, route_id: routeId, stop_id: stopId, tipo, descripcion, lat, lng }),
+    });
+    if (data?.success) {
+        toast('Reporte enviado', 'Gracias por ayudarnos a mejorar el servicio.', 'success', 3000);
+        return true;
+    }
+    toast('Error al enviar reporte', data?.message || 'Inténtalo nuevamente.', 'error');
+    return false;
+}
+
+/* ============================ Indicador fuente de datos =================== */
+function mostrarIndicadorFuenteDatos(buses) {
+    const contenedor = $('#indicadorFuente');
+    if (!contenedor) return;
+
+    const tipos = new Set(buses.map(b => b.fuente_tipo));
+    let texto = 'Datos: ';
+    let clase = '';
+    if (tipos.has('en_vivo')) { texto += '🟢 En vivo (fuente oficial)'; clase = 'badge-success'; }
+    else if (tipos.has('horario_programado')) { texto += '🟡 Horario programado'; clase = 'badge-warning'; }
+    else { texto += '🔴 Simulado (demostración)'; clase = 'badge-danger'; }
+
+    contenedor.innerHTML = `<span class="badge ${clase}">${texto}</span>`;
+}
+
 /* ============================ Arranque ================================== */
 document.addEventListener('DOMContentLoaded', () => {
     initTema();
@@ -327,4 +424,12 @@ document.addEventListener('DOMContentLoaded', () => {
             destino === paginaActual ||
             (paginaActual.startsWith('detalle_ruta') && destino === 'rutas'));
     });
+
+    // Geolocalización del usuario si está en una página con mapa
+    if (APP.mapa && navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+            pos => marcarUsuarioEnMapa(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy),
+            err => console.warn('[geolocalización] denegada o no disponible', err.code)
+        );
+    }
 });

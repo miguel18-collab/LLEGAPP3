@@ -84,6 +84,9 @@ require dirname(__DIR__) . '/includes/header.php';
             <button type="button" class="map-tool-btn" id="btnMiUbicacion" title="Centrar en mi ubicación">
                 <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><circle cx="12" cy="12" r="8"/></svg>
             </button>
+            <button type="button" class="map-tool-btn" id="btnReportar" title="Reportar problema con un bus o ruta">
+                <svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M12 17l-5 5 10-10z"/><path d="M12 12L9 15l6-6z"/></svg>
+            </button>
             <button type="button" class="map-tool-btn" id="btnSeguirActivo" title="Pausar/reanudar actualización">
                 <svg viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
             </button>
@@ -92,110 +95,22 @@ require dirname(__DIR__) . '/includes/header.php';
         <div id="contadorFlota" class="chip" style="position:absolute;top:14px;left:14px;z-index:800;background:var(--surface)">
             <span class="live-dot"></span> <span id="txtFlota">Cargando flota…</span>
         </div>
+        <div id="indicadorFuente" class="chip" style="position:absolute;top:14px;left:170px;z-index:800;background:var(--surface);font-size:12px">
+            Cargando fuente…
+        </div>
     </section>
 </div>
 
 <?php
-$pageScripts = '<script>
-document.addEventListener("DOMContentLoaded", () => {
-    const filtroInicial = ' . json_encode($rutaFiltro) . ';
-    APP.mapa = crearMapa("mapaLeaflet", [' . MAP_CENTER_LAT . ', ' . MAP_CENTER_LNG . '], ' . MAP_DEFAULT_ZOOM . ');
-    if (!APP.mapa) return;
-
-    document.body.dataset.auth = ' . ($currentUser ? '1' : '0') . ';
-
-    // Cargar polilínea si hay ruta filtrada
-    if (filtroInicial) {
-        fetch(`${APP.base}/api/rutas.php?ruta=${encodeURIComponent(filtroInicial)}&con_paradas=1`, {headers:{ "X-Requested-With":"XMLHttpRequest"}})
-            .then(r => r.json())
-            .then(d => { if (d.success) dibujarRuta(APP.mapa, d.data.paradas, d.data.ruta.color); });
-    }
-
-    iniciarPollingFlota({ rutaFiltro: filtroInicial, intervaloMs: 3000, onDatos: datos => {
-        const activos = datos.buses.filter(b => b.status === "operando").length;
-        $("#txtFlota").textContent = `${activos} buses en línea`;
-    }});
-
-    // Filtro por ruta desde sidebar
-    let capaRutaActual = null;
-    $$(".ruta-item").forEach(btn => btn.addEventListener("click", () => {
-        const ruta = btn.dataset.ruta;
-        detenerPolling();
-        Object.values(APP.marcadoresBuses).forEach(m => APP.mapa.removeLayer(m));
-        APP.marcadoresBuses = {};
-        APP.busSeguido = null;
-
-        if (capaRutaActual) { capaRutaActual.forEach(l => APP.mapa.removeLayer(l)); capaRutaActual = null; }
-
-        if (ruta) {
-            fetch(`${APP.base}/api/rutas.php?ruta=${encodeURIComponent(ruta)}&con_paradas=1`, {headers:{"X-Requested-With":"XMLHttpRequest"}})
-                .then(r => r.json())
-                .then(d => { if (d.success) capaRutaActual = dibujarRutaConCapas(APP.mapa, d.data.paradas, d.data.ruta.color); });
-            history.replaceState(null, "", `?ruta=${ruta}`);
-            iniciarPollingFlota({ rutaFiltro: ruta, intervaloMs: 3000 });
-        } else {
-            history.replaceState(null, "", location.pathname);
-            APP.mapa.setView([' . MAP_CENTER_LAT . ', ' . MAP_CENTER_LNG . '], ' . MAP_DEFAULT_ZOOM . ');
-            iniciarPollingFlota({ intervaloMs: 3000 });
-        }
-    }));
-
-    // Búsqueda en sidebar
-    $("#buscarRutaSidebar").addEventListener("input", e => {
-        const q = e.target.value.toLowerCase().trim();
-        $$(".ruta-item").forEach(item => {
-            item.style.display = !q || (item.dataset.buscar || "todas").includes(q) ? "" : "none";
-        });
-    });
-
-    // Mi ubicación
-    $("#btnMiUbicacion").addEventListener("click", () => {
-        if (!navigator.geolocation) return toast("Geolocalización no disponible", "", "error");
-        navigator.geolocation.getCurrentPosition(pos => {
-            APP.mapa.flyTo([pos.coords.latitude, pos.coords.longitude], 15);
-            L.circleMarker([pos.coords.latitude, pos.coords.longitude], {radius:8, color:"#0ea5e9", fillColor:"#0ea5e9", fillOpacity:.9})
-                .bindTooltip("Estás aquí").addTo(APP.mapa);
-        }, () => toast("No se pudo obtener tu ubicación", "Verifica los permisos del navegador.", "error"));
-    });
-
-    // Pausar polling
-    let pausado = false;
-    $("#btnSeguirActivo").addEventListener("click", () => {
-        pausado = !pausado;
-        if (pausado) detenerPolling();
-        else iniciarPollingFlota({ rutaFiltro: filtroInicial, intervaloMs: 3000 });
-        toast(pausado ? "Actualización pausada" : "Actualización reanudada", "", "info", 2200);
-    });
-
-    window.seleccionarParadaMapa = async p => {
-        const data = await api(`${APP.base}/api/eta.php?parada=${p.id}`);
-        if (!data?.success) return;
-        const filas = data.data.buses.map(b =>
-            `<tr><td><strong>${b.bus_code}</strong></td><td>${b.passengers}/${b.capacity} 👥</td><td><strong style="color:${b.eta_min<=3 ? "var(--primary)" : "inherit"}">${b.eta_min} min</strong></td></tr>`
-        ).join("");
-        L.popup().setLatLng([p.lat, p.lng]).setContent(`
-            <strong>🚏 ${p.name}</strong><br>
-            <span style="color:var(--text-muted);font-size:12px">Próximos buses:</span>
-            ${filas || "<em style=\"font-size:12px\">Sin buses próximos</em>"}`).openOn(APP.mapa);
-    };
-});
-
-function dibujarRutaConCapas(mapa, paradas, color) {
-    const capas = [];
-    const puntos = paradas.map(p => [parseFloat(p.lat), parseFloat(p.lng)]);
-    if (puntos.length > 1) {
-        capas.push(L.polyline(puntos, {color, weight:5, opacity:.85}).addTo(mapa));
-    }
-    paradas.forEach((p, i) => {
-        capas.push(L.circleMarker([parseFloat(p.lat), parseFloat(p.lng)], {
-            radius: parseInt(p.is_terminal) === 1 ? 9 : 6, color,
-            fillColor: "#fff", fillOpacity: 1, weight: 3.5
-        }).bindTooltip(`${i+1}. ${p.name}`, {direction:"top"}).addTo(mapa));
-        capas[capas.length-1].on("click", () => window.seleccionarParadaMapa?.(p));
-    });
-    mapa.fitBounds(L.latLngBounds(puntos).pad(.15));
-    return capas;
-}
-</script>';
-require dirname(__DIR__) . '/includes/footer.php';
+// Variables PHP → JS mediante data attributes (evita problemas de comillas en strings inline)
+?>
+<script>
+    // Configuración del mapa desde PHP
+    document.body.dataset.filtroRuta = '<?= e($rutaFiltro) ?>';
+    document.body.dataset.centerLat = '<?= MAP_CENTER_LAT ?>';
+    document.body.dataset.centerLng = '<?= MAP_CENTER_LNG ?>';
+    document.body.dataset.defaultZoom = '<?= MAP_DEFAULT_ZOOM ?>';
+    document.body.dataset.auth = '<?= $currentUser ? '1' : '0' ?>';
+</script>
+<script src="<?= APP_BASE ?>/assets/js/mapa.js?v=<?= APP_VERSION ?>"></script>
 ?>
